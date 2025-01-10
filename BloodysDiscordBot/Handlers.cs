@@ -50,7 +50,38 @@ namespace BloodysDiscordBot
 
         internal static async ValueTask HandleVoiceStateUpdate(VoiceState voiceState)
         {
-            
+            //await Log.LogDebugAsync($"GuildID:{voiceState.GuildId}\nUserName:{voiceState.User?.Username}");
+            // Check if user is the bot
+            if (voiceState.UserId == Globals.G_GatewayClient?.Id)
+            {
+                // Check if bot disconnected
+                if (voiceState.ChannelId is null)
+                {
+                    // Bot was disconnected
+                    await Log.LogDebugAsync("Bot disconnected from Channel");
+                    MusicBot? musicBot = Bot.GetBot<MusicBot>(voiceState.GuildId);
+                    if (musicBot != null)
+                    {
+                        await musicBot.StopMusicAsync();
+
+                        if (musicBot.textChannel != null)
+                        {
+                            await musicBot.textChannel.SendMessageAsync("Stopped playing music because I disconnected from the Channel");
+                        }
+                    }
+                    else
+                    {
+                        await Log.LogDebugAsync("No Music Bot in Guild assigned");
+                    }
+                }
+                else
+                {
+                    await Log.LogDebugAsync($"Bot connected/moved to channel with ID: {voiceState.ChannelId}");
+                }
+                return;
+            }
+
+            await Log.LogDebugAsync($"{voiceState.User?.Username}'s new ChannelId is: {voiceState.ChannelId}");
         }
     }
 }

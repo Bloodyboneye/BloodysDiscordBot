@@ -21,9 +21,9 @@ namespace BloodysDiscordBot
 
         internal static bool G_DebugMode { get; set; } = false;
 
-        internal static int G_BotMusicVolume { get; set; } = 1;
+        //internal static float G_BotMusicVolume { get; set; } = 1;
 
-        internal static int G_BotMusicMaxVolume { get; set; } = 100; 
+        internal static int G_BotMusicMaxVolume { get; set; } = 100;
 
         internal static bool G_BotMusicDownloadPlayList { get; set; } = true;
     }

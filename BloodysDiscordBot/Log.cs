@@ -32,8 +32,11 @@ namespace BloodysDiscordBot
             await Task.CompletedTask;
         }
 
-        internal static async ValueTask LogAsync(string message, LogType logType = LogType.Info)
+        internal static void LogMessage(string message, LogType logType = LogType.Info)
         {
+            if (message == null)
+                return;
+
             string severity = string.Empty;
             switch (logType)
             {
@@ -50,8 +53,18 @@ namespace BloodysDiscordBot
                     severity = InfoSeverity;
                     break;
             }
-
             Console.WriteLine($"{DateTime.Now:T} [{severity}] {message}");
+        }
+
+        internal static void LogDebug(string message)
+        {
+            if (Globals.G_DebugMode)
+                LogMessage(message, LogType.Debug);
+        }
+
+        internal static async ValueTask LogAsync(string message, LogType logType = LogType.Info)
+        {
+            LogMessage(message, logType);
             await Task.CompletedTask;
         }
 

@@ -98,7 +98,7 @@ namespace BloodysDiscordBot
 
             // Set the Volume
             arguments.Add("-filter:a");
-            arguments.Add($"volume={Globals.G_BotMusicVolume}");
+            arguments.Add($"volume={1f}");
 
             // Direct the output to stdout
             arguments.Add("pipe:1");
@@ -129,105 +129,135 @@ namespace BloodysDiscordBot
                 await RespondAsync(InteractionCallback.Message("Invalid Permissions to use this command!"));
                 return;
             }
-            // TODO: Implement Search and check for valid URL
-            var guild = Context.Guild!;
 
-            if (!guild.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
+            if (!Context.Guild!.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
             {
                 await RespondAsync(InteractionCallback.Message("You are not connected to any voice channel!"));
                 return;
             }
 
-            var client = Context.Client;
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
 
-            //guild.GetUserVoiceStateAsync
+            musicBot.textChannel = Context.Channel;
 
-            // TODO: Use existing VoiceClient if bot is already connected?
-            var voiceClient = await client.JoinVoiceChannelAsync(
-                guild.Id,
-                voiceState.ChannelId.GetValueOrDefault());
+            string? message = await musicBot.PlayMusicAsync(track, voiceState, Context.Client);
 
-            // Connect
-            await voiceClient.StartAsync();
+            await RespondAsync(InteractionCallback.Message($"{message}"));
 
-            // Enter speaking state, top be able to send voice
-            await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
+            //// TODO: Implement Search and check for valid URL
+            //var guild = Context.Guild!;
 
-            // Respond to the interaction
-            await RespondAsync(InteractionCallback.Message($"Playing {track}"));
+            //if (!guild.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
+            //{
+            //    await RespondAsync(InteractionCallback.Message("You are not connected to any voice channel!"));
+            //    return;
+            //}
 
-            await Log.LogAsync($"Playing {track}");
+            //var client = Context.Client;
 
-            // Create a stream that sends voice to Discord
-            var outStream = voiceClient.CreateOutputStream();
+            ////guild.GetUserVoiceStateAsync
 
-            OpusEncodeStream opusstream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
+            //// TODO: Use existing VoiceClient if bot is already connected?
+            //var voiceClient = await client.JoinVoiceChannelAsync(
+            //    guild.Id,
+            //    voiceState.ChannelId.GetValueOrDefault());
 
-            string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1");
-            string ytdlpargs = Helper.BuildYTDLPArgs(track);
+            //// Connect
+            //await voiceClient.StartAsync();
 
-            await Log.LogDebugAsync($"FFMPEG Args: {ffmpegargs}");
-            await Log.LogDebugAsync($"YTDLP Args: {ytdlpargs}");
+            //// Enter speaking state, top be able to send voice
+            //await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
 
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = $"/C yt-dlp {ytdlpargs} | ffmpeg {ffmpegargs}",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,   // Capture standard output
-                    RedirectStandardError = true,    // Capture error output
-                    CreateNoWindow = true           // No window for cmd.exe
-                }
-            };
+            //// Respond to the interaction
+            //await RespondAsync(InteractionCallback.Message($"Playing {track}"));
 
-            process.Start();
+            //await Log.LogAsync($"Playing {track}");
 
-            var errorTask = Task.Run(() => Helper.ReadStreamAsync(process.StandardError, "ERROR"));
+            //// Create a stream that sends voice to Discord
+            //var outStream = voiceClient.CreateOutputStream();
 
-            var copyTask = Task.Run(() => process.StandardOutput.BaseStream.CopyToAsync(opusstream));
+            //OpusEncodeStream opusstream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
-            // Wait for the process to complete
-            await process.WaitForExitAsync();
+            //string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1");
+            //string ytdlpargs = Helper.BuildYTDLPArgs(track);
 
-            // Wait for all output to be read
-            await Task.WhenAll(errorTask, copyTask);
+            //await Log.LogDebugAsync($"FFMPEG Args: {ffmpegargs}");
+            //await Log.LogDebugAsync($"YTDLP Args: {ytdlpargs}");
 
-            // Flush 'stream' to make sure all the data has been sent and to indicate to Discord that we have finished sending
-            await opusstream.FlushAsync();
+            //var process = new Process
+            //{
+            //    StartInfo = new ProcessStartInfo
+            //    {
+            //        FileName = "cmd.exe",
+            //        Arguments = $"/C yt-dlp {ytdlpargs} | ffmpeg {ffmpegargs}",
+            //        UseShellExecute = false,
+            //        RedirectStandardOutput = true,   // Capture standard output
+            //        RedirectStandardError = true,    // Capture error output
+            //        CreateNoWindow = true           // No window for cmd.exe
+            //    }
+            //};
 
-            await voiceClient.CloseAsync();
+            //process.Start();
 
-            await client.UpdateVoiceStateAsync(new(guild.Id, null));
+            //var errorTask = Task.Run(() => Helper.ReadStreamAsync(process.StandardError, "ERROR"));
 
-            await Log.LogAsync($"Finished playing {track}");
+            //var copyTask = Task.Run(() => process.StandardOutput.BaseStream.CopyToAsync(opusstream));
+
+            //// Wait for the process to complete
+            //await process.WaitForExitAsync();
+
+            //// Wait for all output to be read
+            //await Task.WhenAll(errorTask, copyTask);
+
+            //// Flush 'stream' to make sure all the data has been sent and to indicate to Discord that we have finished sending
+            //await opusstream.FlushAsync();
+
+            //await voiceClient.CloseAsync();
+
+            //await client.UpdateVoiceStateAsync(new(guild.Id, null));
+
+            //await Log.LogAsync($"Finished playing {track}");
         }
 
-        // TODO: Restart Bot Audio when changing volume!
+        [SlashCommand("stop", "Stops the playback", Contexts = [InteractionContextType.Guild])]
+        public async Task StopMusicAsync()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            await musicBot.StopMusicAsync();
+
+            await RespondAsync(InteractionCallback.Message("Stopped Music Playback"));
+        }
+
+        // TODO: Restart Bot Audio when changing volume?
         [SlashCommand("volume", "Changes the volume of the bot", Contexts = [InteractionContextType.Guild])]
         public async Task ChangeVolumeAsync(int volume)
         {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
             if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
             {
                 // Only allow Bot Author full control
                 if (volume < 0 || volume > Globals.G_BotMusicMaxVolume)
                 {
-                    await RespondAsync(InteractionCallback.Message($"The volume can only be between 0 and {Globals.G_BotMusicMaxVolume}!\nCurrent Volume is: {Globals.G_BotMusicVolume}"));
+                    await RespondAsync(InteractionCallback.Message($"The volume can only be between 0 and {Globals.G_BotMusicMaxVolume}!\nCurrent Volume is: {musicBot.MusicVolume}"));
                     return;
                 }
-                Globals.G_BotMusicVolume = volume / 100;
-                await RespondAsync(InteractionCallback.Message($"New Volume is {Globals.G_BotMusicVolume * 100}%"));
+                musicBot.MusicVolume = ((float)volume) / 100;
+                await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.MusicVolume * 100}%"));
                 return;
             }
             // Allow Bot Author full control
             if (volume < 0)
             {
-                await RespondAsync(InteractionCallback.Message($"The volume can not be below 0!\nCurrent Volume is {Globals.G_BotMusicVolume * 100}%"));
+                await RespondAsync(InteractionCallback.Message($"The volume can not be below 0!\nCurrent Volume is {musicBot.MusicVolume * 100}%"));
                 return;
             }
-            Globals.G_BotMusicVolume = volume / 100;
-            await RespondAsync(InteractionCallback.Message($"New Volume is {Globals.G_BotMusicVolume * 100}%"));
+            musicBot.MusicVolume = ((float)volume) / 100;
+            await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.MusicVolume * 100}%"));
         }
     }
 }
