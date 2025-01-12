@@ -18,7 +18,7 @@ namespace BloodysDiscordBot
 
         public readonly Guild guild;
 
-        public GatewayClient client;
+        public readonly GatewayClient client;
 
         public VoiceClient? voiceClient;
 
@@ -33,7 +33,7 @@ namespace BloodysDiscordBot
 
             var botsByType = AllBots.GetOrAdd(guild.Id, _ => new ConcurrentDictionary<Type, Bot>());
 
-            if (botsByType.TryAdd(GetType(), this))
+            if (!botsByType.TryAdd(GetType(), this))
             {
                 throw new InvalidOperationException($"A bot of type {GetType().Name} already exists for guild {guild.Id}.");
             }
@@ -89,9 +89,18 @@ namespace BloodysDiscordBot
             }
             // Diconnect Bot
             if (this.voiceClient != null)
-                await this.voiceClient.CloseAsync();
+            {
+                try
+                {
+                    await this.voiceClient.CloseAsync();
+                }
+                catch { };
+            }
 
             await this.client!.UpdateVoiceStateAsync(new(guild.Id, null));
+
+            this.voiceState = null;
+            this.voiceClient = null;
         }
     }
 }

@@ -11,6 +11,8 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using System.Diagnostics;
 using System.Collections.Immutable;
+using System.Dynamic;
+using System.Reflection;
 
 namespace BloodysDiscordBot
 {
@@ -122,7 +124,7 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("play", "Plays the specified track", Contexts = [InteractionContextType.Guild])]
-        public async Task PlayAsync(string track)
+        public async Task PlayAsync([SlashCommandParameter(Description = "Music Link or Query to play")]string track)
         {
             if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
             {
@@ -136,88 +138,35 @@ namespace BloodysDiscordBot
                 return;
             }
 
+            // Defer Message becuase Video lookup takes to long
+            await RespondAsync(InteractionCallback.DeferredMessage());
+
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             musicBot ??= new MusicBot(Context.Guild, Context.Client);
 
             musicBot.textChannel = Context.Channel;
 
-            string? message = await musicBot.PlayMusicAsync(track, voiceState, Context.Client);
+            try
+            {
+                // Attempt to play the track
+                string? message = await musicBot.PlayMusicAsync(track, voiceState, Context.Client);
 
-            await RespondAsync(InteractionCallback.Message($"{message}"));
-
-            //// TODO: Implement Search and check for valid URL
-            //var guild = Context.Guild!;
-
-            //if (!guild.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
-            //{
-            //    await RespondAsync(InteractionCallback.Message("You are not connected to any voice channel!"));
-            //    return;
-            //}
-
-            //var client = Context.Client;
-
-            ////guild.GetUserVoiceStateAsync
-
-            //// TODO: Use existing VoiceClient if bot is already connected?
-            //var voiceClient = await client.JoinVoiceChannelAsync(
-            //    guild.Id,
-            //    voiceState.ChannelId.GetValueOrDefault());
-
-            //// Connect
-            //await voiceClient.StartAsync();
-
-            //// Enter speaking state, top be able to send voice
-            //await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
-
-            //// Respond to the interaction
-            //await RespondAsync(InteractionCallback.Message($"Playing {track}"));
-
-            //await Log.LogAsync($"Playing {track}");
-
-            //// Create a stream that sends voice to Discord
-            //var outStream = voiceClient.CreateOutputStream();
-
-            //OpusEncodeStream opusstream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
-
-            //string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1");
-            //string ytdlpargs = Helper.BuildYTDLPArgs(track);
-
-            //await Log.LogDebugAsync($"FFMPEG Args: {ffmpegargs}");
-            //await Log.LogDebugAsync($"YTDLP Args: {ytdlpargs}");
-
-            //var process = new Process
-            //{
-            //    StartInfo = new ProcessStartInfo
-            //    {
-            //        FileName = "cmd.exe",
-            //        Arguments = $"/C yt-dlp {ytdlpargs} | ffmpeg {ffmpegargs}",
-            //        UseShellExecute = false,
-            //        RedirectStandardOutput = true,   // Capture standard output
-            //        RedirectStandardError = true,    // Capture error output
-            //        CreateNoWindow = true           // No window for cmd.exe
-            //    }
-            //};
-
-            //process.Start();
-
-            //var errorTask = Task.Run(() => Helper.ReadStreamAsync(process.StandardError, "ERROR"));
-
-            //var copyTask = Task.Run(() => process.StandardOutput.BaseStream.CopyToAsync(opusstream));
-
-            //// Wait for the process to complete
-            //await process.WaitForExitAsync();
-
-            //// Wait for all output to be read
-            //await Task.WhenAll(errorTask, copyTask);
-
-            //// Flush 'stream' to make sure all the data has been sent and to indicate to Discord that we have finished sending
-            //await opusstream.FlushAsync();
-
-            //await voiceClient.CloseAsync();
-
-            //await client.UpdateVoiceStateAsync(new(guild.Id, null));
-
-            //await Log.LogAsync($"Finished playing {track}");
+                if (message == null)
+                {
+                    // Update the response if an error occurred
+                    await ModifyResponseAsync(action: options => options.Content = "Error while trying to play Music!");
+                }
+                else
+                {
+                    // Update the response with success message
+                    await ModifyResponseAsync(action: options => options.Content = message);
+                }
+            }
+            catch (Exception ex)
+            {
+                await Log.LogAsync($"Error occured in {nameof(PlayAsync)}: {ex.Message}");
+                await ModifyResponseAsync(action: options => options.Content = $"An error occurred: {ex.Message}");
+            }
         }
 
         [SlashCommand("stop", "Stops the playback", Contexts = [InteractionContextType.Guild])]
@@ -228,7 +177,7 @@ namespace BloodysDiscordBot
 
             await musicBot.StopMusicAsync();
 
-            await RespondAsync(InteractionCallback.Message("Stopped Music Playback"));
+            await RespondAsync(InteractionCallback.Message("Stopped Music playback"));
         }
 
         // TODO: Restart Bot Audio when changing volume?

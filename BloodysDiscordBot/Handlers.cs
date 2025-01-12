@@ -44,7 +44,7 @@ namespace BloodysDiscordBot
             {
                 LogMessage logMessage = LogMessage.Error(ex);
                 await Log.LogDiscordClientMessageAsync(logMessage);
-                await Log.LogAsync(failResult.Message);
+                await Log.LogAsync(failResult.Message, LogType.Error);
             }
         }
 
@@ -60,7 +60,7 @@ namespace BloodysDiscordBot
                     // Bot was disconnected
                     await Log.LogDebugAsync("Bot disconnected from Channel");
                     MusicBot? musicBot = Bot.GetBot<MusicBot>(voiceState.GuildId);
-                    if (musicBot != null)
+                    if (musicBot != null && musicBot.IsPlayingMusic())
                     {
                         await musicBot.StopMusicAsync();
 

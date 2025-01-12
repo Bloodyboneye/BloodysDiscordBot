@@ -40,18 +40,17 @@ namespace BloodysDiscordBot
             sb.AppendLine("-filter:a");
             sb.AppendLine($"volume={volume}");
 
-            // Direct output to stdout
             if (output != null)
                 sb.AppendLine(output);
 
             return sb.Replace(Environment.NewLine, " ").ToString().Trim();
         }
 
-        internal static string BuildYTDLPArgs(string track, bool randomPlaylist = false, bool completePlayList = true)
+        internal static string BuildYTDLPArgs(string track, bool randomPlaylist = false, bool completePlaylist = true)
         {
             StringBuilder sb = new();
 
-            sb.AppendLine(completePlayList ? "--yes-playlist" : "--no-playlist");
+            sb.AppendLine(completePlaylist ? "--yes-playlist" : "--no-playlist");
 
             if (randomPlaylist)
                 sb.AppendLine("--playlist-random");
@@ -116,7 +115,7 @@ namespace BloodysDiscordBot
 
                 if (!process.WaitForExit(musicInfoTimeOut))
                 {
-                    Log.LogMessage("Timed out on getting Music Info!");
+                    Log.LogMessage("Timed out on getting Music Info!", LogType.Error);
                     return null;
                 }
                 //process.WaitForExit();
@@ -124,12 +123,14 @@ namespace BloodysDiscordBot
                 if (process.ExitCode != 0)
                 {
                     string error = process.StandardError.ReadToEnd();
-                    Log.LogMessage($"{error} occured while trying to get music info!");
+                    Log.LogMessage($"{error} occured while trying to get music info!", LogType.Error);
                     return null;
                 }
 
                 // Read output
                 string output = process.StandardOutput.ReadToEnd();
+
+                Log.LogDebug($"GetMusicInfo output from ytdlp: '{output}'");
 
                 // Parse output
                 string[] lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);

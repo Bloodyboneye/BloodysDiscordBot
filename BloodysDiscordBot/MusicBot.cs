@@ -26,7 +26,7 @@ namespace BloodysDiscordBot
         public readonly uint duration = duration;
     }
 
-    public class MusicBot : Bot
+    public class MusicBot(Guild guild, GatewayClient client) : Bot(guild, client)
     {
         private const string defaultSearchOption = "ytsearch:";
 
@@ -49,11 +49,6 @@ namespace BloodysDiscordBot
         public ConcurrentQueue<MusicQueueItem> musicQueue = [];
 
         public MusicQueueItem? currentMusic;
-
-        public MusicBot(Guild guild, GatewayClient client) : base(guild, client)
-        {
-            
-        }
 
         private async Task<string?> AddMusicToQueueAsync(string musicInput)
         {
@@ -138,15 +133,25 @@ namespace BloodysDiscordBot
                         {
                             await textChannel.SendMessageAsync("Tried to play Music while queue is empty!");
                         }
-                        await Log.LogDebugAsync($"Tried to play Music while queue is empty!");
+                        await Log.LogAsync($"Tried to play Music while queue is empty!");
+                        return;
                     }
+
+                    var currentMusicCached = currentMusic;
+
+                    if (textChannel != null)
+                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"Starting playback of [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
+                                                                                  .WithFlags(MessageFlags.SuppressEmbeds));
+
+                    await Log.LogAsync($"Starting playback of [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})");
+
                     // Setup Music
                     outStream = voiceClient.CreateOutputStream();
 
                     opusStream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
                     string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1");
-                    string ytdlpargs = Helper.BuildYTDLPArgs(currentMusic!.fileOrURL);
+                    string ytdlpargs = Helper.BuildYTDLPArgs(currentMusic.fileOrURL);
                     string cmdargs = string.Format(basecmdargs, ytdlpargs, ffmpegargs);
 
                     this.ffmpegargs = ffmpegargs;
@@ -187,16 +192,19 @@ namespace BloodysDiscordBot
                     await process.WaitForExitAsync();
 
                     // Wait for all output to be read
-                    await Task.WhenAll(errorTask, copyTask);
+                    //await Task.WhenAll(errorTask, copyTask);
 
                     // Flush 'stream' to make sure all the data has been sent and to indicate to Discord that we have finished sending
                     await opusStream.FlushAsync();
 
-                    await Log.LogAsync($"Finished playing {currentMusic.songName}");
+                    await Log.LogAsync($"Finished playing {currentMusicCached.songName}");
 
                     if (textChannel != null)
                     {
-                        await textChannel.SendMessageAsync($"Finished playing [{currentMusic.songName}]({currentMusic.fileOrURL})");
+                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"Finished playing [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
+                                                          .WithFlags(MessageFlags.SuppressEmbeds));
+                        //await textChannel.SendMessageAsync($"Finished playing {(currentMusicCached != null ? currentMusicCached.songName : "Music")}");
+                        //await textChannel.SendMessageAsync($"Finished playing [{currentMusic.songName}]({currentMusic.fileOrURL})");
                     }
                 }
                 catch (Exception ex)
@@ -207,8 +215,10 @@ namespace BloodysDiscordBot
                 {
                     opusStream?.Close();
                     outStream?.Close();
+                    currentMusic = null;
                 }
             }
+            await LeaveVoiceChannelAsync();
         }
 
         public async Task<string?> PlayMusicAsync(string musicInput, VoiceState newVoiceState, GatewayClient client)
@@ -229,7 +239,7 @@ namespace BloodysDiscordBot
 
                 bool newVoiceStateSet = false;
 
-                if (voiceState is null || voiceState.ChannelId != newVoiceState.ChannelId)
+                if (GetVoiceState()?.ChannelId != newVoiceState.ChannelId)
                 {
                     voiceState = newVoiceState;
                     newVoiceStateSet = true;
@@ -242,7 +252,7 @@ namespace BloodysDiscordBot
                         await voiceClient.CloseAsync();
                     }
 
-                    voiceClient = await client.JoinVoiceChannelAsync(voiceState.GuildId, voiceState.ChannelId.GetValueOrDefault());
+                    voiceClient = await client.JoinVoiceChannelAsync(voiceState!.GuildId, voiceState.ChannelId.GetValueOrDefault());
                     await voiceClient.StartAsync();
                     await voiceClient.EnterSpeakingStateAsync(SpeakingFlags.Microphone);
                 }
@@ -259,7 +269,7 @@ namespace BloodysDiscordBot
                     }
                     catch (Exception ex)
                     {
-                        Log.LogDebug($"{ex} Exception occured while trying to play music!");
+                        Log.LogMessage($"{ex} Exception occured while trying to play music!", LogType.Error);
                     }
                 });
 
@@ -278,7 +288,9 @@ namespace BloodysDiscordBot
             musicQueue.Clear();
             ForceStopCurrentMusic();
             await LeaveVoiceChannelAsync();
-            await Log.LogDebugAsync("Stopped music playback!");
+            await Log.LogAsync("Stopped music playback!");
         }
+
+        public bool IsPlayingMusic() => !(currentMusic is null || musicPlayerProcess is null || musicPlayerProcess.HasExited);
     }
 }
