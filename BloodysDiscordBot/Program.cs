@@ -49,17 +49,17 @@ namespace BloodysDiscordBot
 
             Globals.G_ApplicationCommandService = applicationCommandService;
 
-            if (Globals.G_DebugMode)
-            {
-                applicationCommandService.AddSlashCommand("ping", "Ping!", () => "Pong!");
-            }
+            //if (Globals.G_DebugMode)
+            //{
+            //    applicationCommandService.AddSlashCommand("ping", "Ping!", () => "Pong!");
+            //}
 
-            //applicationCommandService.AddModules(typeof(Program).Assembly);
+            ////applicationCommandService.AddModules(typeof(Program).Assembly);
 
-            if (Globals.G_DebugMode)
-            {
-                applicationCommandService.AddModule<TestModule>();
-            }
+            //if (Globals.G_DebugMode)
+            //{
+            //    applicationCommandService.AddModule<TestModule>();
+            //}
 
             applicationCommandService.AddModule<MusicModule>();
 

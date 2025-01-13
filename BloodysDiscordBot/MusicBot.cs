@@ -13,19 +13,6 @@ using System.Runtime.CompilerServices;
 
 namespace BloodysDiscordBot
 {
-    public class MusicQueueItem(string fileOrURL, string songName, bool isFile, string author, uint duration)
-    {
-        public readonly string fileOrURL = fileOrURL;
-
-        public readonly string songName = songName;
-
-        public readonly bool isFile = isFile;
-
-        public readonly string author = author;
-
-        public readonly uint duration = duration;
-    }
-
     public class MusicBot(Guild guild, GatewayClient client) : Bot(guild, client)
     {
         private const string defaultSearchOption = "ytsearch:";
@@ -44,11 +31,27 @@ namespace BloodysDiscordBot
 
         public uint currentMusicLocation;
 
-        public float MusicVolume = 1f;
+        public float musicVolume = 1f;
+
+        public float defaultMusicVolume = 1f;
 
         public ConcurrentQueue<MusicQueueItem> musicQueue = [];
 
         public MusicQueueItem? currentMusic;
+
+        public ConcurrentDictionary<AudioFilter, MusicFilter> musicFilters = [];
+
+        public override async Task LeaveVoiceChannelAsync()
+        {
+            await base.LeaveVoiceChannelAsync();
+            musicVolume = defaultMusicVolume;
+            musicFilters.Clear();
+            await Log.LogAsync("All Music Filters have been disabled!");
+            if (textChannel != null)
+            {
+                await textChannel.SendMessageAsync("All Filters have been disabled!");
+            }
+        }
 
         private async Task<string?> AddMusicToQueueAsync(string musicInput)
         {
@@ -100,6 +103,8 @@ namespace BloodysDiscordBot
             }
         }
 
+        public void SkipCurrentMusic() => ForceStopCurrentMusic();
+
         private async Task StartPlayingMusic()
         {
             while (!musicQueue.IsEmpty)
@@ -150,7 +155,7 @@ namespace BloodysDiscordBot
 
                     opusStream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
-                    string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1");
+                    string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1", musicVolume, musicFilters);
                     string ytdlpargs = Helper.BuildYTDLPArgs(currentMusic.fileOrURL);
                     string cmdargs = string.Format(basecmdargs, ytdlpargs, ffmpegargs);
 
@@ -218,13 +223,14 @@ namespace BloodysDiscordBot
                     currentMusic = null;
                 }
             }
+
             await LeaveVoiceChannelAsync();
         }
 
         public async Task<string?> PlayMusicAsync(string musicInput, VoiceState newVoiceState, GatewayClient client)
         {
             // Check if the bot is currently playing music and add it to the queue if it is otherwise play the music
-            if (currentMusic is null || musicPlayerProcess is null || musicPlayerProcess.HasExited)
+            if (!IsPlayingMusic())
             {
                 // No Music is currently playing
                 // Add it to the Queue and play it directly

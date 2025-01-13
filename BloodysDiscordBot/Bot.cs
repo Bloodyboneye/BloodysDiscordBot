@@ -72,7 +72,7 @@ namespace BloodysDiscordBot
             return this.voiceState;
         }
 
-        public async Task LeaveVoiceChannelAsync()
+        public virtual async Task LeaveVoiceChannelAsync()
         {
             if (this.voiceState == null)
             {

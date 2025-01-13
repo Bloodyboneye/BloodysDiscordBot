@@ -19,6 +19,7 @@ namespace BloodysDiscordBot
     public class MusicModule : ApplicationCommandModule<ApplicationCommandContext>
     {
 
+        // TODO: Instead of playing directly add play file to queue and implement playing from file!
         [SlashCommand("playfile", "Plays music from File", Contexts = [InteractionContextType.Guild])]
         public async Task PlayFileAsync(string track)
         {
@@ -126,11 +127,11 @@ namespace BloodysDiscordBot
         [SlashCommand("play", "Plays the specified track", Contexts = [InteractionContextType.Guild])]
         public async Task PlayAsync([SlashCommandParameter(Description = "Music Link or Query to play")]string track)
         {
-            if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
-            {
-                await RespondAsync(InteractionCallback.Message("Invalid Permissions to use this command!"));
-                return;
-            }
+            //if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
+            //{
+            //    await RespondAsync(InteractionCallback.Message("Invalid Permissions to use this command!"));
+            //    return;
+            //}
 
             if (!Context.Guild!.VoiceStates.TryGetValue(Context.User.Id, out var voiceState))
             {
@@ -180,33 +181,213 @@ namespace BloodysDiscordBot
             await RespondAsync(InteractionCallback.Message("Stopped Music playback"));
         }
 
-        // TODO: Restart Bot Audio when changing volume?
-        [SlashCommand("volume", "Changes the volume of the bot", Contexts = [InteractionContextType.Guild])]
-        public async Task ChangeVolumeAsync(int volume)
+        [SlashCommand("volume", "Gets/Sets the volume of the bot", Contexts = [InteractionContextType.Guild])]
+        public async Task ChangeVolumeAsync([SlashCommandParameter(Description = "New volume in percent")] int? volume = null)
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
             musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (volume == null)
+            {
+                await RespondAsync(InteractionCallback.Message($"Current Volume is {musicBot.musicVolume * 100}%"));
+                return;
+            }
+
             if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
             {
                 // Only allow Bot Author full control
                 if (volume < 0 || volume > Globals.G_BotMusicMaxVolume)
                 {
-                    await RespondAsync(InteractionCallback.Message($"The volume can only be between 0 and {Globals.G_BotMusicMaxVolume}!\nCurrent Volume is: {musicBot.MusicVolume}"));
+                    await RespondAsync(InteractionCallback.Message($"The volume can only be between 0% and {Globals.G_BotMusicMaxVolume}%!\nCurrent Volume is: {musicBot.musicVolume}"));
                     return;
                 }
-                musicBot.MusicVolume = ((float)volume) / 100;
-                await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.MusicVolume * 100}%"));
+                musicBot.musicVolume = ((float)volume) / 100;
+                await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.musicVolume * 100}%"));
+                await Log.LogDebugAsync($"New volume is {musicBot.musicVolume * 100}%");
                 return;
             }
             // Allow Bot Author full control
             if (volume < 0)
             {
-                await RespondAsync(InteractionCallback.Message($"The volume can not be below 0!\nCurrent Volume is {musicBot.MusicVolume * 100}%"));
+                await RespondAsync(InteractionCallback.Message($"The volume can not be below 0%!\nCurrent Volume is {musicBot.musicVolume * 100}%"));
                 return;
             }
-            musicBot.MusicVolume = ((float)volume) / 100;
-            await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.MusicVolume * 100}%"));
+            musicBot.musicVolume = ((float)volume) / 100;
+            await RespondAsync(InteractionCallback.Message($"New Volume is {musicBot.musicVolume * 100}%"));
+            await Log.LogDebugAsync($"New volume is {musicBot.musicVolume * 100}%");
+        }
+
+        [SlashCommand("filter", "Applies the selected audio filter", Contexts = [InteractionContextType.Guild])]
+        public async Task FilterAsync([SlashCommandParameter(Name = "filter", Description = "The filter to apply")]AudioFilter? filter = null,
+                                      [SlashCommandParameter(Name = "strength", Description = "The strength of the Filter")]float? strength = null)
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (filter is null)
+            {
+                if (musicBot.musicFilters is null || musicBot.musicFilters.IsEmpty)
+                {
+                    await RespondAsync(InteractionCallback.Message("Filters:\n```-```"));
+                }
+                else
+                {
+                    // List filters instead of setting filter
+                    StringBuilder filters = new("Filters:\n```");
+                    foreach (var filterValue in musicBot.musicFilters)
+                    {
+                        filters.AppendLine($"{filterValue.Value.filterName}:{filterValue.Value.strength}");
+                    }
+
+                    filters.Append("```");
+
+                    await RespondAsync(InteractionCallback.Message(filters.ToString()));
+                }
+                return;
+            }
+
+            // Add or remove filter if it alread was added
+            MusicFilter? musicFilter = null;
+            switch (filter)
+            {
+                case AudioFilter.BassBost:
+                    musicFilter = strength.HasValue ? MusicFilter.BassFilter(strength.Value * 10) : MusicFilter.BassFilter();
+                    break;
+                case AudioFilter.Pitch:
+                    musicFilter = strength.HasValue ? MusicFilter.PitchFilter(strength.Value * 1) : MusicFilter.PitchFilter();
+                    break;
+                case AudioFilter.Tempo:
+                    musicFilter = strength.HasValue ? MusicFilter.TempoFilter(strength.Value * 1) : MusicFilter.TempoFilter();
+                    break;
+                case AudioFilter.Nightcore:
+                    musicFilter = strength.HasValue ? MusicFilter.NightcoreFilter(strength.Value * 1.15f, strength.Value * 1.25f) : MusicFilter.NightcoreFilter();
+                    break;
+                case AudioFilter.Slowdown:
+                    musicFilter = strength.HasValue ? MusicFilter.SlowdownFilter(strength.Value * 0.83f, strength.Value * 0.87f) : MusicFilter.SlowdownFilter();
+                    break;
+                case AudioFilter.Reverb:
+                    musicFilter = strength.HasValue ? MusicFilter.ReverbFilter(strength.Value * 0.8f, strength.Value * 0.9f, strength.Value * 1000f, strength.Value * 0.3f) : MusicFilter.ReverbFilter();
+                    break;
+                case AudioFilter.Chorus:
+                    musicFilter = strength.HasValue ? MusicFilter.ChorusFilter(strength.Value * 0.5f, strength.Value * 0.9f, strength.Value * 60f, strength.Value * 0.4f, strength.Value * 0.25f, strength.Value * 2f) : MusicFilter.ChorusFilter();
+                    break;
+                case AudioFilter.Distortion:
+                    musicFilter = MusicFilter.DistortionFilter();
+                    break;
+                case AudioFilter.Flanger:
+                    musicFilter = MusicFilter.FlangerFilter();
+                    break;
+                case AudioFilter.Tremolo:
+                    musicFilter = strength.HasValue ? MusicFilter.TremoloFilter(depth: strength.Value * 0.8f) : MusicFilter.TremoloFilter();
+                    break;
+                case AudioFilter.Vibrato:
+                    musicFilter = strength.HasValue ? MusicFilter.VibratoFilter(depth: strength.Value * 0.1f) : MusicFilter.VibratoFilter();
+                    break;
+                case AudioFilter.Phaser:
+                    musicFilter = strength.HasValue ? MusicFilter.PhaserFilter() : MusicFilter.PhaserFilter();
+                    break;
+                default:
+                    await Log.LogAsync($"Invalid filter: {Enum.GetName(typeof(AudioFilter), filter)}");
+                    await RespondAsync(InteractionCallback.Message($"Internal Error: Filter is not valid!"));
+                    return;
+            }
+
+            musicFilter.strength = strength ?? 1f;
+
+            musicBot.musicFilters ??= []; // Create Dictionary if it for some reason doesn't exist
+
+            // Check if Filter is already contained
+
+            var musicFilterDict = musicBot.musicFilters;
+
+            if (!musicFilterDict.IsEmpty && musicFilterDict.ContainsKey(filter.Value))
+            {
+                // Filter already set, remove it
+                if (!musicFilterDict.TryRemove(filter.Value, out _))
+                {
+                    await RespondAsync(InteractionCallback.Message("Internal Error while trying to disable filter!"));
+                    await Log.LogAsync($"Internal Error while trying to disable filter:{filter.Value}!");
+                    return;
+                }
+                await RespondAsync(InteractionCallback.Message($"> Filter: {filter.Value} disabled"));
+                await Log.LogAsync($"Filter: '{filter.Value}' disabled");
+                return;
+            }
+            // Add filter
+            if (!musicFilterDict.TryAdd(filter.Value, musicFilter))
+            {
+                await RespondAsync(InteractionCallback.Message("Internal Error while trying to activate filter!"));
+                await Log.LogAsync($"Internal Error while trying to activate filter:{filter.Value}!");
+                return;
+            }
+            await RespondAsync(InteractionCallback.Message("Filter successfully activated!"));
+            await Log.LogAsync($"Successfully acivated filter: {filter.Value}!");
+        }
+
+        [SlashCommand("skip", "Skips current song", Contexts = [InteractionContextType.Guild])]
+        public async Task SkipMusic()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (!musicBot.IsPlayingMusic())
+            {
+                await RespondAsync(InteractionCallback.Message("No Music is currently playing!"));
+                return;
+            }
+            musicBot.SkipCurrentMusic();
+
+            await RespondAsync(InteractionCallback.Message("Skipped current playback"));
+        }
+
+        [SlashCommand("clear", "Clears the Queue", Contexts = [InteractionContextType.Guild])]
+        public async Task ClearMusicQueue()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            musicBot.musicQueue.Clear();
+
+            await RespondAsync(InteractionCallback.Message("Music queue cleared!"));
+        }
+
+
+        [SlashCommand("queue", "Displays the songs in the queue", Contexts = [InteractionContextType.Guild])]
+        public async Task DisplayQueueMusic([SlashCommandParameter(Name = "page", Description = "Page to get info for", MinValue = 1)] int page = 1)
+        {
+            int entriesPerPage = 10;
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (musicBot.musicQueue.IsEmpty)
+            {
+                await RespondAsync(InteractionCallback.Message("Queue is Empty!"));
+                return;
+            }
+            int pageCount = (int)Math.Clamp(musicBot.musicQueue.Count / entriesPerPage, 1, decimal.MaxValue);
+            if (page > pageCount)
+                page = pageCount;
+            MusicQueueItem[] musicQueueArray = new MusicQueueItem[musicBot.musicQueue.Count];
+            musicBot.musicQueue.CopyTo(musicQueueArray, 0);
+
+            int startIndex = (page - 1) * entriesPerPage;
+            int endIndex = Math.Min(musicQueueArray.Length, ((page - 1) * entriesPerPage) + entriesPerPage);
+
+            StringBuilder sb = new StringBuilder($"Queue Page: {page}/{pageCount}\n```");
+
+            for (int i = startIndex; i < endIndex; i++)
+            {
+                sb.AppendLine($"[{musicQueueArray[i].songName}]({musicQueueArray[i].fileOrURL})");
+            }
+
+            sb.Append("```");
+
+            await RespondAsync(InteractionCallback.Message(sb.ToString().Trim()));
         }
     }
 }

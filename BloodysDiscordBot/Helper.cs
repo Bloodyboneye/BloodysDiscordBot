@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace BloodysDiscordBot
     {
         private const int musicInfoTimeOut = 10 * 1000;
 
-        internal static string BuildFFMPEGArgs(string? input = null, string? output = null, float volume = 1f)
+        internal static string BuildFFMPEGArgs(string? input = null, string? output = null, float volume = 1f, ConcurrentDictionary<AudioFilter, MusicFilter>? filters = null)
         {
             StringBuilder sb = new();
 
@@ -38,7 +39,17 @@ namespace BloodysDiscordBot
 
             // Set the Volume
             sb.AppendLine("-filter:a");
-            sb.AppendLine($"volume={volume}");
+            sb.AppendLine($"\"volume={volume}");
+
+            // Apply all other Filters
+            if (filters != null)
+            {
+                foreach (var filter in filters)
+                {
+                    sb.Append($",{filter.Value.musicFilter}");
+                }
+            }
+            sb.Append('"');
 
             if (output != null)
                 sb.AppendLine(output);
