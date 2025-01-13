@@ -39,7 +39,7 @@ namespace BloodysDiscordBot
 
             // Set the Volume
             sb.AppendLine("-filter:a");
-            sb.AppendLine($"\"volume={volume}");
+            sb.Append($"\"volume={volume}");
 
             // Apply all other Filters
             if (filters != null)
@@ -49,7 +49,7 @@ namespace BloodysDiscordBot
                     sb.Append($",{filter.Value.musicFilter}");
                 }
             }
-            sb.Append('"');
+            sb.Append("\" ");
 
             if (output != null)
                 sb.AppendLine(output);

@@ -45,11 +45,14 @@ namespace BloodysDiscordBot
         {
             await base.LeaveVoiceChannelAsync();
             musicVolume = defaultMusicVolume;
-            musicFilters.Clear();
-            await Log.LogAsync("All Music Filters have been disabled!");
-            if (textChannel != null)
+            if (musicFilters is not null && !musicFilters.IsEmpty)
             {
-                await textChannel.SendMessageAsync("All Filters have been disabled!");
+                musicFilters.Clear();
+                await Log.LogAsync("All Music Filters have been disabled!");
+                if (textChannel != null)
+                {
+                    await textChannel.SendMessageAsync("All Filters have been disabled!");
+                }
             }
         }
 
