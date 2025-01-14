@@ -160,5 +160,49 @@ namespace BloodysDiscordBot
                 return null;
             }
         }
+
+        internal static void ConcurrentQueueAddToFront<T>(ConcurrentQueue<T> queue, T item)
+        {
+            var stack = new ConcurrentStack<T>();
+
+            while(queue.TryDequeue(out var queuedItem))
+            {
+                stack.Push(queuedItem);
+            }
+
+            queue.Enqueue(item);
+
+            while(stack.TryPop(out var poppedItem))
+            {
+                queue.Enqueue(poppedItem);
+            }
+        }
+
+        internal static bool ConcurrentQueueTryRemoveLast<T>(ConcurrentQueue<T> queue)
+        {
+            List<T> tempList = [];
+            bool itemRemoved = false;
+
+            // Dequeue all items
+            while (queue.TryDequeue(out var item))
+            {
+                tempList.Add(item);
+            }
+
+            if (tempList.Count > 0)
+            {
+                // Remove the last item
+                tempList.RemoveAt(tempList.Count - 1);
+                itemRemoved = true;
+            }
+
+            // Re-enqueue the remaining items
+            foreach (var item in tempList)
+            {
+                queue.Enqueue(item);
+            }
+
+            return itemRemoved; // Return true if an item was removed
+        }
     }
 }

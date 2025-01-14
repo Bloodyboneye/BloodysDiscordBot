@@ -135,6 +135,8 @@ namespace BloodysDiscordBot
                         return;
                     }
 
+                    LoopType oldLoopType = loopType;
+
                     // Dequeue music // Check if should loop current song and then don't remove it from the queue
                     if (!(loopType == LoopType.CurrentSong ? musicQueue.TryPeek(out MusicQueueItem? currentMusicCached) : musicQueue.TryDequeue(out currentMusicCached)) || currentMusicCached is null)
                     {
@@ -221,6 +223,30 @@ namespace BloodysDiscordBot
                                                           .WithFlags(MessageFlags.SuppressEmbeds));
                         //await textChannel.SendMessageAsync($"Finished playing {(currentMusicCached != null ? currentMusicCached.songName : "Music")}");
                         //await textChannel.SendMessageAsync($"Finished playing [{currentMusic.songName}]({currentMusic.fileOrURL})");
+                    }
+
+                    // Check old loop type and readd song if nesecary
+                    if (oldLoopType != loopType)
+                    {
+                        // Loop Type changed while playing music!
+                        switch (loopType)
+                        {
+                            case LoopType.None:
+                                if (oldLoopType == LoopType.CurrentSong)
+                                    musicQueue.TryDequeue(out _); // Remove first because we don't want to loop the current song anymore
+                                else if (oldLoopType == LoopType.CurrentQueue)
+                                    Helper.ConcurrentQueueTryRemoveLast(musicQueue);
+                                break;
+                            case LoopType.CurrentQueue:
+                                musicQueue.Enqueue(currentMusicCached); // Readd current song because it was removed
+                                break;
+                            case LoopType.CurrentSong:
+                                Helper.ConcurrentQueueAddToFront(musicQueue, currentMusicCached);
+                                break;
+                            default:
+                                await Log.LogDebugAsync("Unknown LoopType!");
+                                break;
+                        }
                     }
                 }
                 catch (Exception ex)
