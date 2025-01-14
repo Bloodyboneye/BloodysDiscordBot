@@ -8,7 +8,6 @@ using NetCord.Rest;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace BloodysDiscordBot
 {

@@ -1,11 +1,5 @@
 ﻿using NetCord.Gateway;
-using NetCord.JsonConverters;
 using NetCord.Services.ApplicationCommands;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BloodysDiscordBot
 {

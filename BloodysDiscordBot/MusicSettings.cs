@@ -1,5 +1,12 @@
 ﻿namespace BloodysDiscordBot
 {
+    public enum LoopType
+    {
+        None = 0,
+        CurrentSong = 1,
+        CurrentQueue = 2,
+    }
+
     public enum AudioFilter
     {
         BassBost,

@@ -1,5 +1,4 @@
-﻿
-using NetCord;
+﻿using NetCord;
 using NetCord.Services.ApplicationCommands;
 
 namespace BloodysDiscordBot

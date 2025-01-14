@@ -9,7 +9,6 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using System.Diagnostics;
 using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
 
 namespace BloodysDiscordBot
 {
@@ -35,6 +34,8 @@ namespace BloodysDiscordBot
 
         public float defaultMusicVolume = 1f;
 
+        public LoopType loopType = LoopType.None;
+    
         public ConcurrentQueue<MusicQueueItem> musicQueue = [];
 
         public MusicQueueItem? currentMusic;
@@ -134,8 +135,8 @@ namespace BloodysDiscordBot
                         return;
                     }
 
-                    // Dequeue music
-                    if (!musicQueue.TryDequeue(out currentMusic) || currentMusic is null)
+                    // Dequeue music // Check if should loop current song and then don't remove it from the queue
+                    if (!(loopType == LoopType.CurrentSong ? musicQueue.TryPeek(out MusicQueueItem? currentMusicCached) : musicQueue.TryDequeue(out currentMusicCached)) || currentMusicCached is null)
                     {
                         if (textChannel != null)
                         {
@@ -145,10 +146,17 @@ namespace BloodysDiscordBot
                         return;
                     }
 
-                    var currentMusicCached = currentMusic;
+                    if (loopType == LoopType.CurrentQueue)
+                    {
+                        // Readd Item to queue if should loop through queue
+                        await Log.LogDebugAsync("Readding song to queue because LoopType is set to CurrentQueue!");
+                        musicQueue.Enqueue(currentMusicCached);
+                    }
+
+                    currentMusic = currentMusicCached;
 
                     if (textChannel != null)
-                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"Starting playback of [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
+                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"> Starting playback of [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
                                                                                   .WithFlags(MessageFlags.SuppressEmbeds));
 
                     await Log.LogAsync($"Starting playback of [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})");
@@ -159,7 +167,7 @@ namespace BloodysDiscordBot
                     opusStream = new(outStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
                     string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1", musicVolume, musicFilters);
-                    string ytdlpargs = Helper.BuildYTDLPArgs(currentMusic.fileOrURL);
+                    string ytdlpargs = Helper.BuildYTDLPArgs(currentMusicCached.fileOrURL);
                     string cmdargs = string.Format(basecmdargs, ytdlpargs, ffmpegargs);
 
                     this.ffmpegargs = ffmpegargs;
@@ -209,7 +217,7 @@ namespace BloodysDiscordBot
 
                     if (textChannel != null)
                     {
-                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"Finished playing [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
+                        await textChannel.SendMessageAsync(new MessageProperties().WithContent($"> Finished playing [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
                                                           .WithFlags(MessageFlags.SuppressEmbeds));
                         //await textChannel.SendMessageAsync($"Finished playing {(currentMusicCached != null ? currentMusicCached.songName : "Music")}");
                         //await textChannel.SendMessageAsync($"Finished playing [{currentMusic.songName}]({currentMusic.fileOrURL})");

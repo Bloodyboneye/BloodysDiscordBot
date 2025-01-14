@@ -389,5 +389,86 @@ namespace BloodysDiscordBot
 
             await RespondAsync(InteractionCallback.Message(sb.ToString().Trim()));
         }
+
+        [SlashCommand("loop", "Changes loop setting", Contexts = [InteractionContextType.Guild])]
+        public async Task LoopMusic([SlashCommandParameter(Name = "type", Description = "Looping type")] LoopType? loopType = null) 
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            // No bot with this Guild Id, create it
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            loopType ??= musicBot.loopType == LoopType.None ? LoopType.CurrentSong : LoopType.None; // Swap Loop type to Current Song or to none if none is set
+
+            musicBot.loopType = loopType.Value;
+
+            await Log.LogAsync($"Changed loop setting to: {Enum.GetName(typeof(LoopType), loopType.Value)}");
+
+            await RespondAsync(InteractionCallback.Message($"> Changed loop setting to {Enum.GetName(typeof(LoopType), loopType)}"));
+        }
+
+        [SlashCommand("shuffle", "Shuffels the current queue", Contexts = [InteractionContextType.Guild])]
+        public async Task ShuffleQueueCommand()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (musicBot.musicQueue.IsEmpty)
+            {
+                await RespondAsync(InteractionCallback.Message("Tried to shuffle queue while queue is empty!"));
+                return;
+            }
+
+            if (musicBot.musicQueue.Count == 1)
+                return; // No need to shuffle queue if only one item is inside
+
+            // Maybe Fix/TODO? Kind of not thread safe, queue Reads from for example the music Player / Queue List and others could still use wrong queue while shuffeling
+            List<MusicQueueItem> items = [.. musicBot.musicQueue];
+
+            Random random = new();
+
+            for (int i = items.Count - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (items[i], items[j]) = (items[j], items[i]);
+            }
+
+            // Maybe change? Create new Queue instead of clearing current queue and adding items
+            musicBot.musicQueue.Clear();
+            foreach (var item in items)
+            {
+                musicBot.musicQueue.Enqueue(item);
+            }
+
+            await RespondAsync(InteractionCallback.Message("> Shuffled queue!"));
+            await Log.LogAsync($"Shuffled queue with {items.Count} items!");
+        }
+
+        [SlashCommand("remove", "Removes the specified Item from the queue", Contexts = [InteractionContextType.Guild])]
+        public async Task RemoveFromQueueCommand([SlashCommandParameter(Name = "index", Description = "The Index of the Item to remove", MinValue = 1)] int queueItemIndex)
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (musicBot.musicQueue.Count <= queueItemIndex)
+            {
+                await Log.LogAsync($"Tried to remove Item with Index {queueItemIndex - 1} from queue but queue size is {musicBot.musicQueue.Count}");
+                await RespondAsync(InteractionCallback.Message($"> Can't remove Item at {queueItemIndex} because max Item is {musicBot.musicQueue.Count}!"));
+                return;
+            }
+            // Maybe Fix/TODO? Kind of not thread safe, queue Reads from for example the music Player / Queue List and others could still use wrong queue while removing item...
+            List<MusicQueueItem> items = [.. musicBot.musicQueue];
+
+            items.RemoveAt(queueItemIndex - 1);
+
+            musicBot.musicQueue.Clear();
+
+            foreach (var item in items)
+            {
+                musicBot.musicQueue.Enqueue(item);
+            }
+
+            await Log.LogAsync($"Removed Item from Queue at Location {queueItemIndex}");
+            await RespondAsync(InteractionCallback.Message($"> Removed Item from Queue at Location {queueItemIndex}!"));
+        }
     }
 }
