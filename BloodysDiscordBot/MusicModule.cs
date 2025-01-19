@@ -1,18 +1,9 @@
 ﻿using NetCord.Services.ApplicationCommands;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using NetCord.Services;
 using NetCord;
 using NetCord.Rest;
-using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using System.Diagnostics;
-using System.Collections.Immutable;
-using System.Dynamic;
-using System.Reflection;
 
 namespace BloodysDiscordBot
 {
@@ -21,7 +12,7 @@ namespace BloodysDiscordBot
 
         // TODO: Instead of playing directly add play file to queue and implement playing from file!
         [SlashCommand("playfile", "Plays music from File", Contexts = [InteractionContextType.Guild])]
-        public async Task PlayFileAsync(string track)
+        public async Task PlayFileCommand(string track)
         {
             // Check if owner ID is set and if then only allow owner to use command
             if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
@@ -125,7 +116,7 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("play", "Plays the specified track", Contexts = [InteractionContextType.Guild])]
-        public async Task PlayAsync([SlashCommandParameter(Description = "Music Link or Query to play")]string track)
+        public async Task PlayCommand([SlashCommandParameter(Description = "Music Link or Query to play")]string track)
         {
             //if (Globals.G_BotAuthor != 0 && Context.User.Id != Globals.G_BotAuthor)
             //{
@@ -165,13 +156,13 @@ namespace BloodysDiscordBot
             }
             catch (Exception ex)
             {
-                await Log.LogAsync($"Error occured in {nameof(PlayAsync)}: {ex.Message}");
+                await Log.LogAsync($"Error occured in {nameof(PlayCommand)}: {ex.Message}");
                 await ModifyResponseAsync(action: options => options.Content = $"An error occurred: {ex.Message}");
             }
         }
 
         [SlashCommand("stop", "Stops the playback", Contexts = [InteractionContextType.Guild])]
-        public async Task StopMusicAsync()
+        public async Task StopMusicCommand()
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             musicBot ??= new MusicBot(Context.Guild, Context.Client);
@@ -182,7 +173,7 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("volume", "Gets/Sets the volume of the bot", Contexts = [InteractionContextType.Guild])]
-        public async Task ChangeVolumeAsync([SlashCommandParameter(Description = "New volume in percent")] int? volume = null)
+        public async Task ChangeVolumeCommand([SlashCommandParameter(Description = "New volume in percent")] int? volume = null)
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
@@ -219,8 +210,8 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("filter", "Applies the selected audio filter", Contexts = [InteractionContextType.Guild])]
-        public async Task FilterAsync([SlashCommandParameter(Name = "filter", Description = "The filter to apply")]AudioFilter? filter = null,
-                                      [SlashCommandParameter(Name = "strength", Description = "The strength of the Filter")]float? strength = null)
+        public async Task FilterAsyncCommand([SlashCommandParameter(Name = "filter", Description = "The filter to apply")]AudioFilter? filter = null,
+                                             [SlashCommandParameter(Name = "strength", Description = "The strength of the Filter")] float? strength = null)
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
@@ -249,7 +240,7 @@ namespace BloodysDiscordBot
             }
 
             // Add or remove filter if it alread was added
-            MusicFilter? musicFilter = null;
+            MusicFilter? musicFilter;
             switch (filter)
             {
                 case AudioFilter.BassBost:
@@ -323,17 +314,17 @@ namespace BloodysDiscordBot
                 return;
             }
             await RespondAsync(InteractionCallback.Message("Filter successfully activated!"));
-            await Log.LogAsync($"Successfully acivated filter: {filter.Value}!");
+            await Log.LogAsync($"Successfully activated filter: {filter.Value}!");
         }
 
         [SlashCommand("skip", "Skips current song", Contexts = [InteractionContextType.Guild])]
-        public async Task SkipMusic()
+        public async Task SkipMusicCommand()
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
             musicBot ??= new MusicBot(Context.Guild, Context.Client);
 
-            if (!musicBot.IsPlayingMusic())
+            if (!musicBot.IsPlayingMusic)
             {
                 await RespondAsync(InteractionCallback.Message("No Music is currently playing!"));
                 return;
@@ -344,7 +335,7 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("clear", "Clears the Queue", Contexts = [InteractionContextType.Guild])]
-        public async Task ClearMusicQueue()
+        public async Task ClearMusicQueueCommand()
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
@@ -357,7 +348,7 @@ namespace BloodysDiscordBot
 
 
         [SlashCommand("queue", "Displays the songs in the queue", Contexts = [InteractionContextType.Guild])]
-        public async Task DisplayQueueMusic([SlashCommandParameter(Name = "page", Description = "Page to get info for", MinValue = 1)] int page = 1)
+        public async Task DisplayQueueMusicCommand([SlashCommandParameter(Name = "page", Description = "Page to get info for", MinValue = 1)] int page = 1)
         {
             int entriesPerPage = 10;
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
@@ -378,7 +369,7 @@ namespace BloodysDiscordBot
             int startIndex = (page - 1) * entriesPerPage;
             int endIndex = Math.Min(musicQueueArray.Length, ((page - 1) * entriesPerPage) + entriesPerPage);
 
-            StringBuilder sb = new StringBuilder($"Queue Page: {page}/{pageCount}\n```");
+            StringBuilder sb = new($"Queue Page: {page}/{pageCount}\n```");
 
             for (int i = startIndex; i < endIndex; i++)
             {
@@ -391,7 +382,7 @@ namespace BloodysDiscordBot
         }
 
         [SlashCommand("loop", "Changes loop setting", Contexts = [InteractionContextType.Guild])]
-        public async Task LoopMusic([SlashCommandParameter(Name = "type", Description = "Looping type")] LoopType? loopType = null) 
+        public async Task LoopMusicCommand([SlashCommandParameter(Name = "type", Description = "Looping type")] LoopType? loopType = null) 
         {
             var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
             // No bot with this Guild Id, create it
@@ -469,6 +460,67 @@ namespace BloodysDiscordBot
 
             await Log.LogAsync($"Removed Item from Queue at Location {queueItemIndex}");
             await RespondAsync(InteractionCallback.Message($"> Removed Item from Queue at Location {queueItemIndex}!"));
+        }
+
+        [SlashCommand("pause", "Pauses playback", Contexts = [InteractionContextType.Guild])]
+        public async Task PauseMusicPlaybackCommand()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (!musicBot.IsPlayingMusic)
+            {
+                await Log.LogAsync("Tried to pause playback while there is no song playing!");
+                await RespondAsync(InteractionCallback.Message("> Can not pause playback while there is no song playing!"));
+                return;
+            } else if (musicBot.isPaused)
+            {
+                await Log.LogAsync("Tried to pause playback while Music is already paused!");
+                await RespondAsync(InteractionCallback.Message("> Music playback is already paused!"));
+                return;
+            }
+            musicBot.PausePlayback();
+            await Log.LogAsync("Paused music playback");
+            await RespondAsync(InteractionCallback.Message("> Music playback is now paused!"));
+        }
+
+        [SlashCommand("resume", "Resumes playback", Contexts = [InteractionContextType.Guild])]
+        public async Task ResumeMusicPlaybackCommand()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (!musicBot.IsPlayingMusic)
+            {
+                await Log.LogAsync("Tried to resume playback while there is no song playing!");
+                await RespondAsync(InteractionCallback.Message("> Can not resume playback while there is no song playing!"));
+                return;
+            }
+            else if (!musicBot.isPaused)
+            {
+                await Log.LogAsync("Tried to resume playback while Music is not paused!");
+                await RespondAsync(InteractionCallback.Message("> Music playback is not paused!"));
+                return;
+            }
+            musicBot.ResumePlayback();
+            await Log.LogAsync("Resumed music playback");
+            await RespondAsync(InteractionCallback.Message("> Music playback is now resumed!"));
+        }
+
+        [SlashCommand("now_playing", "Gives Info about the current music that is playing", Contexts = [InteractionContextType.Guild])]
+        public async Task NowPlayingCommand()
+        {
+            var musicBot = Bot.GetBot<MusicBot>(Context.Guild!.Id);
+            musicBot ??= new MusicBot(Context.Guild, Context.Client);
+
+            if (!musicBot.IsPlayingMusic)
+            {
+                await RespondAsync(InteractionCallback.Message("> Nothing is currently playing!"));
+                return;
+            }
+            await Log.LogAsync($"Currently playing [{musicBot.currentMusic!.songName}]({musicBot.currentMusic.fileOrURL}) Time: {musicBot.currentMusicLocation}s/{musicBot.currentMusic.duration}s | {(uint)(musicBot.currentMusicLocation / musicBot.currentMusic.duration * 100)}%");
+            await RespondAsync(InteractionCallback.Message(new InteractionMessageProperties().WithContent($"Currently playing [{musicBot.currentMusic!.songName}]({musicBot.currentMusic.fileOrURL}) Time: {musicBot.currentMusicLocation}s/{musicBot.currentMusic.duration}s | {(uint)(musicBot.currentMusicLocation / musicBot.currentMusic.duration * 100)}%")
+                                                                                             .WithFlags(MessageFlags.SuppressEmbeds)));
         }
     }
 }

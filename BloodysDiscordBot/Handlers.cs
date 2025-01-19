@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Metadata.Ecma335;
-using System.Text;
-using System.Threading.Tasks;
-using NetCord;
+﻿using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services;
@@ -60,7 +54,7 @@ namespace BloodysDiscordBot
                     // Bot was disconnected
                     await Log.LogDebugAsync("Bot disconnected from Channel");
                     MusicBot? musicBot = Bot.GetBot<MusicBot>(voiceState.GuildId);
-                    if (musicBot != null && musicBot.IsPlayingMusic())
+                    if (musicBot is not null && musicBot.IsPlayingMusic)
                     {
                         await musicBot.StopMusicAsync();
 
@@ -69,7 +63,7 @@ namespace BloodysDiscordBot
                             await musicBot.textChannel.SendMessageAsync("Stopped playing music because I disconnected from the Channel");
                         }
                     }
-                    else
+                    else if (musicBot is null)
                     {
                         await Log.LogDebugAsync("No Music Bot in Guild assigned");
                     }

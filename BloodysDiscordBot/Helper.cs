@@ -1,10 +1,7 @@
-﻿using System;
+﻿using NetCord.Gateway.Voice;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace BloodysDiscordBot
 {
@@ -80,12 +77,115 @@ namespace BloodysDiscordBot
             return sb.Replace(Environment.NewLine, " ").ToString().Trim();
         }
 
-        internal static async Task ReadStreamAsync(StreamReader reader, string streamName)
+        internal static double? TimeStringToSeconds(string input)
         {
-            while (!reader.EndOfStream)
+            // Find the 'time=' string inside of the ffmpeg error output and parse it
+            int timeIndex = input.IndexOf("time=");  
+            if (timeIndex == -1)
+                return null;
+            timeIndex += 5; // "time=" is 5 characters long
+
+            int spaceIndex = input.IndexOf(' ', timeIndex); // Find the next space after "time="
+            string timeString = spaceIndex == -1
+                ? input[timeIndex..]
+                : input[timeIndex..spaceIndex];
+
+            string[] timeParts = timeString.Split(':');
+
+            double hours = 0;
+            double minutes;
+            double seconds;
+            if (timeParts.Length == 3) // HH:MM:SS.xx format
             {
-                string? line = await reader.ReadLineAsync();
-                //await Log.LogDebugAsync($"[{streamName}] {line}");
+                hours = double.Parse(timeParts[0]);
+                minutes = double.Parse(timeParts[1]);
+                seconds = double.Parse(timeParts[2]);
+            }
+            else if (timeParts.Length == 2) // MM:SS.xx format
+            {
+                minutes = double.Parse(timeParts[0]);
+                seconds = double.Parse(timeParts[1]);
+            }
+            else
+            {
+                return null;
+            }
+
+            // Convert to total seconds
+            return hours * 3600 + minutes * 60 + seconds;
+        }
+
+        internal static async Task ReadErrorStreamAsync(Stream errorStream, string processName, MusicBot? musicBot = null)
+        {
+            using StreamReader reader = new(errorStream);
+            string? error;
+            while ((error = await reader.ReadLineAsync()) != null)
+            {
+                await Log.LogDebugAsync($"{processName} ErrorStream: {error}");
+
+                if (error.Contains("[error]", StringComparison.OrdinalIgnoreCase))
+                {
+                    await Log.LogAsync($"{processName} Error: {error}", LogType.Error); // Only display error if it actually is an error
+                }
+
+                if (musicBot is not null && "ffmpeg".Equals(processName))
+                {
+                    // Extract time
+                    double? currentTime = TimeStringToSeconds(error);
+                    if (currentTime.HasValue) 
+                        musicBot.currentMusicLocation = currentTime.Value;
+                }
+            }
+        }
+
+        internal static async Task StreamDataAsync(Stream ytdlpStream, Stream ffmpegStream, int maxQueueSize, MusicBot musicBot, CancellationToken cancellationToken)
+        {
+            // TODO: Fix pauses... Not Sure how yet // Maybe buffer output from ffmpeg instead?
+            var buffer = new byte[4096]; // 8192
+            int bytesRead;
+            bool wasPaused = false;
+
+            var dataQueue = new Queue<byte[]>();
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                // Check if paused or queue is full
+                if (musicBot.isPaused)
+                {
+                    wasPaused = true;
+                    if (dataQueue.Count >= maxQueueSize)
+                    {
+                        // Pause Streaming data
+                        await Task.Delay(100, cancellationToken);
+                        continue;
+                    }
+                }
+
+                // Read data from ytdlp Stream if queue has space and playback if not paused
+                bytesRead = await ytdlpStream.ReadAsync(buffer, cancellationToken);
+
+                if (cancellationToken.IsCancellationRequested || (bytesRead <= 0 && dataQueue.Count <= 0))
+                    break; // End of Stream and queue is empty or cancellation requested
+
+                if (bytesRead > 0)
+                {
+                    byte[] data = new byte[bytesRead];
+
+                    Array.Copy(buffer, data, bytesRead);
+
+                    // Add the data to the queue
+
+                    dataQueue.Enqueue(data);
+                }
+
+                // Write to ffmpeg stream if there's data in the queue and music is not paused
+                while (dataQueue.Count > 0 && !musicBot.isPaused)
+                {
+                    byte[] queuedData = dataQueue.Dequeue();
+                    await ffmpegStream.WriteAsync(queuedData, cancellationToken);
+                    if (wasPaused)
+                        await Task.Delay((int)(queuedData.Length / 44100.0 * 1000), cancellationToken); // Assume 44.1kHz audio // Without will skip forward
+                }
             }
         }
 

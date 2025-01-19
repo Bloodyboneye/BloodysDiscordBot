@@ -1,13 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using NetCord;
-using NetCord.Gateway;
+﻿using NetCord.Gateway;
 
 namespace BloodysDiscordBot
 {
@@ -36,23 +27,13 @@ namespace BloodysDiscordBot
         {
             if (message == null)
                 return;
-
-            string severity = string.Empty;
-            switch (logType)
+            string severity = logType switch
             {
-                case LogType.Info:
-                    severity = InfoSeverity;
-                    break;
-                case LogType.Error:
-                    severity = ErrorSeverity;
-                    break;
-                case LogType.Debug:
-                    severity = DebugSeverity;
-                    break;
-                default:
-                    severity = InfoSeverity;
-                    break;
-            }
+                LogType.Info => InfoSeverity,
+                LogType.Error => ErrorSeverity,
+                LogType.Debug => DebugSeverity,
+                _ => InfoSeverity,
+            };
             Console.WriteLine($"{DateTime.Now:T} [{severity}] {message}");
         }
 

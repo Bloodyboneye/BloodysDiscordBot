@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using NetCord;
+﻿using NetCord;
 using NetCord.Rest;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
@@ -16,23 +11,31 @@ namespace BloodysDiscordBot
     {
         private const string defaultSearchOption = "ytsearch:";
 
-        private const string basecmdargs = "/C yt-dlp {0} | ffmpeg {1}";
+        private const int maxQueueSizeForPlaybackCopy = 10;
+
+        //private const string basecmdargs = "/C yt-dlp {0} | ffmpeg {1}";
 
         public string? ffmpegargs;
 
         public string? ytdlpargs;
 
-        public Process? musicPlayerProcess;
+        //public Process? musicPlayerProcess;
+
+        public Process? ytdlpProcess;
+
+        public Process? ffmpegProcess;
 
         public Task? musicPlayerTask;
 
-        public string? cmdargs;
+        //public string? cmdargs;
 
-        public uint currentMusicLocation;
+        public double currentMusicLocation;
 
         public float musicVolume = 1f;
 
         public float defaultMusicVolume = 1f;
+
+        public bool isPaused;
 
         public LoopType loopType = LoopType.None;
     
@@ -41,6 +44,8 @@ namespace BloodysDiscordBot
         public MusicQueueItem? currentMusic;
 
         public ConcurrentDictionary<AudioFilter, MusicFilter> musicFilters = [];
+
+        private CancellationTokenSource? playbackCancellationSource;
 
         public override async Task LeaveVoiceChannelAsync()
         {
@@ -99,12 +104,23 @@ namespace BloodysDiscordBot
         {
             // Stop Current music playback if there is any currently playing
             currentMusic = null;
-            if (musicPlayerProcess != null)
+            if (ytdlpProcess != null)
             {
-                if (!musicPlayerProcess.HasExited)
-                    musicPlayerProcess.Kill();
-                musicPlayerProcess = null;
+                if (!ytdlpProcess.HasExited)
+                    ytdlpProcess.Kill();
+                ytdlpProcess.Dispose();
+                ytdlpProcess = null;
             }
+            if (ffmpegProcess != null)
+            {
+                if (!ffmpegProcess.HasExited)
+                    ffmpegProcess.Kill();
+                ffmpegProcess.Dispose();
+                ffmpegProcess = null;
+            }
+            playbackCancellationSource?.Cancel();
+            playbackCancellationSource?.Dispose();
+            playbackCancellationSource = null;
         }
 
         public void SkipCurrentMusic() => ForceStopCurrentMusic();
@@ -120,6 +136,9 @@ namespace BloodysDiscordBot
                 try
                 {
                     ForceStopCurrentMusic();
+
+                    playbackCancellationSource = new CancellationTokenSource();
+                    CancellationToken ct = playbackCancellationSource.Token;
 
                     // Check if is in voice channel
                     VoiceState? voicestate = GetVoiceState();
@@ -170,59 +189,75 @@ namespace BloodysDiscordBot
 
                     string ffmpegargs = Helper.BuildFFMPEGArgs("pipe:0", "pipe:1", musicVolume, musicFilters);
                     string ytdlpargs = Helper.BuildYTDLPArgs(currentMusicCached.fileOrURL);
-                    string cmdargs = string.Format(basecmdargs, ytdlpargs, ffmpegargs);
+                    //string cmdargs = string.Format(basecmdargs, ytdlpargs, ffmpegargs);
 
                     this.ffmpegargs = ffmpegargs;
                     this.ytdlpargs = ytdlpargs;
-                    this.cmdargs = cmdargs;
+                    //this.cmdargs = cmdargs;
 
                     await Log.LogDebugAsync($"FFMPEG Args: {ffmpegargs}");
                     await Log.LogDebugAsync($"YTDLP Args: {ytdlpargs}");
-                    await Log.LogDebugAsync($"CMD Args: {cmdargs}");
 
-                    // Start Music Process
+                    // Start the music processes
 
-                    var process = new Process
+                    ytdlpProcess = new Process
                     {
                         StartInfo = new ProcessStartInfo
                         {
-                            FileName = "cmd.exe",
-                            Arguments = cmdargs,
-                            //Arguments = $"/C yt-dlp {ytdlpargs} | ffmpeg {ffmpegargs}",
+                            FileName = "yt-dlp",
+                            Arguments = ytdlpargs,
                             UseShellExecute = false,
-                            RedirectStandardOutput = true,   // Capture standard output
-                            RedirectStandardError = true,    // Capture error output
-                            CreateNoWindow = true           // No window for cmd.exe
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
                         }
                     };
 
-                    musicPlayerProcess = process;
 
-                    currentMusicLocation = 0;
+                    ffmpegProcess = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "ffmpeg",
+                            Arguments = ffmpegargs,
+                            UseShellExecute = false,
+                            RedirectStandardInput = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        }
+                    };
 
-                    process.Start();
+                    currentMusicLocation = 0d;
 
-                    var errorTask = Task.Run(() => Helper.ReadStreamAsync(process.StandardError, "ERROR"));
+                    ytdlpProcess.Start();
+                    ffmpegProcess.Start();
 
-                    var copyTask = Task.Run(() => process.StandardOutput.BaseStream.CopyToAsync(opusStream));
+                    var ytdlpErrorTask = Task.Run(() => Helper.ReadErrorStreamAsync(ytdlpProcess.StandardError.BaseStream, "yt-dlp"), ct);
+                    var ffmpegErrorTask = Task.Run(() => Helper.ReadErrorStreamAsync(ffmpegProcess.StandardError.BaseStream, "ffmpeg", this), ct);
 
-                    // Wait for the process to complete
-                    await process.WaitForExitAsync();
+                    //var ytdlpOutputTask = Task.Run(() => ytdlpProcess.StandardOutput.BaseStream.CopyToAsync(ffmpegProcess.StandardInput.BaseStream, ct), ct);
+                    var ytdlpOutputTask = Task.Run(() => Helper.StreamDataAsync(ytdlpProcess.StandardOutput.BaseStream, ffmpegProcess.StandardInput.BaseStream, maxQueueSizeForPlaybackCopy, this, ct), ct);
+                    var ffmpegOutputTask = Task.Run(() => ffmpegProcess.StandardOutput.BaseStream.CopyToAsync(opusStream, ct), ct);
 
-                    // Wait for all output to be read
-                    //await Task.WhenAll(errorTask, copyTask);
+                    await ytdlpOutputTask;
 
-                    // Flush 'stream' to make sure all the data has been sent and to indicate to Discord that we have finished sending
-                    await opusStream.FlushAsync();
+                    ffmpegProcess.StandardOutput.Close();
+                    ffmpegProcess.StandardError.Close();
+
+                    //ffmpegProcess.Kill(); // Force close ffmpeg because reading from StandardError or StandardOutput? seems to make it not close
+
+                    //await ffmpegOutputTask;
+                    //await Task.WhenAll(ytdlpOutputTask, ffmpegOutputTask);
+
+                    await opusStream.FlushAsync();     
 
                     await Log.LogAsync($"Finished playing {currentMusicCached.songName}");
 
                     if (textChannel != null)
                     {
                         await textChannel.SendMessageAsync(new MessageProperties().WithContent($"> Finished playing [{currentMusicCached.songName}]({currentMusicCached.fileOrURL})")
-                                                          .WithFlags(MessageFlags.SuppressEmbeds));
-                        //await textChannel.SendMessageAsync($"Finished playing {(currentMusicCached != null ? currentMusicCached.songName : "Music")}");
-                        //await textChannel.SendMessageAsync($"Finished playing [{currentMusic.songName}]({currentMusic.fileOrURL})");
+                                                                                  .WithFlags(MessageFlags.SuppressEmbeds));
                     }
 
                     // Check old loop type and readd song if nesecary
@@ -249,6 +284,10 @@ namespace BloodysDiscordBot
                         }
                     }
                 }
+                catch (OperationCanceledException) 
+                {
+                    await Log.LogDebugAsync("Music Playback was canceled with OperationCanceledException");
+                }
                 catch (Exception ex)
                 {
                     await Log.LogAsync(ex.ToString(), LogType.Error);
@@ -258,6 +297,8 @@ namespace BloodysDiscordBot
                     opusStream?.Close();
                     outStream?.Close();
                     currentMusic = null;
+                    playbackCancellationSource?.Dispose();
+                    playbackCancellationSource = null;
                 }
             }
 
@@ -267,7 +308,7 @@ namespace BloodysDiscordBot
         public async Task<string?> PlayMusicAsync(string musicInput, VoiceState newVoiceState, GatewayClient client)
         {
             // Check if the bot is currently playing music and add it to the queue if it is otherwise play the music
-            if (!IsPlayingMusic())
+            if (!IsPlayingMusic)
             {
                 // No Music is currently playing
                 // Add it to the Queue and play it directly
@@ -330,10 +371,23 @@ namespace BloodysDiscordBot
             // Stop music Playback and clear queue
             musicQueue.Clear();
             ForceStopCurrentMusic();
+            isPaused = false;
             await LeaveVoiceChannelAsync();
             await Log.LogAsync("Stopped music playback!");
         }
 
-        public bool IsPlayingMusic() => !(currentMusic is null || musicPlayerProcess is null || musicPlayerProcess.HasExited);
+        public void PausePlayback()
+        {
+            isPaused = true;
+            Log.LogMessage("Paused Playback");
+        }
+
+        public void ResumePlayback()
+        {
+            isPaused = false;
+            Log.LogMessage("Resumed Playback");
+        }
+
+        public bool IsPlayingMusic => !(currentMusic is null || ((ytdlpProcess is null || ytdlpProcess.HasExited) && (ffmpegProcess is null || ffmpegProcess.HasExited)));
     }
 }

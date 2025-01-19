@@ -1,7 +1,6 @@
 ﻿using NetCord;
 using NetCord.Gateway;
 using NetCord.Services.ApplicationCommands;
-using System.Diagnostics.CodeAnalysis;
 
 namespace BloodysDiscordBot
 {
@@ -82,7 +81,7 @@ namespace BloodysDiscordBot
                         if (i + 1 >= args.Length)
                             break;
                         Globals.G_BotToken = args[i+1];
-                        i = i + 1;
+                        i++;
                         break;
                     case "-ba":
                     case "-botauthor":
@@ -91,11 +90,11 @@ namespace BloodysDiscordBot
                         if (!ulong.TryParse(args[i + 1], out ulong authortoken))
                         {
                             Console.WriteLine("Failed to parse Bot Author Token!");
-                            i = i + 1;
+                            i++;
                             break;
                         }
                         Globals.G_BotAuthor = authortoken;
-                        i = i + 1;
+                        i++;
                         break;
                     case "-d":
                     case "-debug":
